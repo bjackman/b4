@@ -34,6 +34,7 @@ import io
 
 import requests
 
+from hashlib import sha256
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, Tuple, Set, List, BinaryIO, Union, Sequence, Literal, Iterator, Dict
@@ -1526,16 +1527,17 @@ class LoreMessage:
             self._attestors.append(attestor)
 
     @staticmethod
-    def run_local_check(cmdargs: List[str], ident: str, msg: email.message.EmailMessage,
+    def run_local_check(cmdargs: List[str], commit: str, msg: email.message.EmailMessage,
                         nocache: bool = False) -> List[Tuple[str, str]]:
-        cacheid = ' '.join(cmdargs) + ident
+        logger.debug('Checking commit=%s using %s', commit, cmdargs[0])
+        bdata = LoreMessage.get_msg_as_bytes(msg)
+
+        cacheid = ' '.join(cmdargs) + sha256(bdata).hexdigest()
         if not nocache:
             cachedata = get_cache(cacheid, suffix='checks', as_json=True)
             if cachedata is not None:
                 return cachedata
 
-        logger.debug('Checking ident=%s using %s', ident, cmdargs[0])
-        bdata = LoreMessage.get_msg_as_bytes(msg)
         topdir = git_get_toplevel()
         mycmd = os.path.basename(cmdargs[0])
         ecode, out, err = _run_command(cmdargs, stdin=bdata, rundir=topdir)
@@ -3469,6 +3471,7 @@ def git_range_to_patches(gitdir: Optional[str], start: str, end: str,
                 '--binary',
                 '--patch-with-stat',
                 '--encoding=utf-8',
+                '--notes=checkpatch-ignore',
                 commit,
             ],
             decode=False,
